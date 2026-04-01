@@ -1,0 +1,61 @@
+# Recipe Template — Copy and customize per product
+# File: configs/recipes/{product_id}.yaml
+
+recipe_id: "product_001"
+product_name: "Sample PCB v1"
+version: "1.0"
+
+# Image acquisition
+pixels_per_mm: 50.0
+image_size: [4000, 3000]
+origin_offset: [0.0, 0.0]
+
+# Fiducial detection
+fiducial:
+  method: "circle"            # "template" | "circle"
+  min_diameter: 0.8           # mm
+  max_diameter: 2.0           # mm
+  match_threshold: 0.7
+  expected_count: 2
+  reference_positions:        # Expected fiducial positions in aligned image (pixels)
+    - [200, 200]
+    - [3800, 2800]
+
+# Lighting
+lighting:
+  sequences:
+    - name: dome
+      intensity: 80
+      duration_ms: 50
+    - name: low_angle
+      intensity: 100
+      duration_ms: 50
+    - name: coaxial
+      intensity: 90
+      duration_ms: 50
+
+# CAD data
+cad_file: ""                  # Path to CPL/ODB++ file
+cad_format: "cpl"             # "cpl" | "odb" | "gerber"
+
+# Golden images
+golden_dir: ""                # Path to golden image directory
+
+# Model paths (per inspection type)
+model_paths:
+  # anomaly: "data/models/product_001/efficientad/model.onnx"
+
+# Thresholds (per inspection type)
+thresholds:
+  anomaly: 0.5
+  reference: 0.8
+  rule_based: 0.7
+  blob: 0.5
+
+# Component-specific overrides
+component_overrides: {}
+  # Example:
+  # U1:
+  #   anomaly_threshold: 0.6
+  # R1:
+  #   max_offset_px: 5.0

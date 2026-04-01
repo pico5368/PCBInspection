@@ -1,0 +1,21 @@
+# PCB Inspection System — Default Configuration
+
+logging:
+  level: INFO
+  format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+
+alignment:
+  quality_threshold: 0.7
+  max_retries: 1
+
+inspection:
+  default_thresholds:
+    anomaly: 0.5
+    reference: 0.8
+    rule_based: 0.7
+    blob: 0.5
+
+output:
+  results_dir: data/logs
+  save_images: false
+  save_anomaly_maps: false

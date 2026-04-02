@@ -39,8 +39,8 @@ def main():
     datamodule = MVTecAD(
         root=str(DATASET_ROOT.parent),
         category="transistor",
-        train_batch_size=8,
-        eval_batch_size=8,
+        train_batch_size=1 if args.model == "efficient_ad" else 8,
+        eval_batch_size=1 if args.model == "efficient_ad" else 8,
         num_workers=0,  # Windows compatibility
     )
 

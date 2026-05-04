@@ -23,7 +23,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from pcb_inspection.camera.crevis import CameraConfig, CrevisCamera
+from pcb_inspection.camera import CameraConfig, create_camera
+from pcb_inspection.camera.crevis import CrevisCamera  # noqa: F401  type-only ref
 from pcb_inspection.common.types import ComponentROI, InspectionType, Severity
 from pcb_inspection.pipeline.runner import InspectionPipeline
 from pcb_inspection.recipe.manager import Recipe, load_recipe
@@ -46,6 +47,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--exposure", type=float, default=3000.0, help="Exposure time (us)")
     p.add_argument("--device", type=int, default=0, help="Camera device index")
     p.add_argument("--show", action="store_true", default=True, help="Display results visually")
+    p.add_argument(
+        "--backend",
+        choices=("auto", "crevis", "mock"),
+        default="auto",
+        help="Camera backend (auto: crevis if SDK present else mock)",
+    )
+    p.add_argument("--mock-image", type=str, help="Path to image used by mock backend")
     return p.parse_args()
 
 
@@ -185,7 +193,15 @@ def main() -> None:
 
     # --- Camera setup ---
     config = CameraConfig(exposure_us=args.exposure)
-    cam = CrevisCamera(config=config, device_index=args.device)
+    mock_kwargs: dict = {}
+    if args.mock_image:
+        mock_kwargs["image_path"] = args.mock_image
+    cam = create_camera(
+        backend=args.backend,
+        config=config,
+        device_index=args.device,
+        **mock_kwargs,
+    )
 
     try:
         cam.open()

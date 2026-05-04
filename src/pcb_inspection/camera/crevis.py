@@ -10,11 +10,10 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-try:
-    import cvsCam
-except ImportError:
-    cvsCam = None
-    logger.warning("cvsCam SDK not installed. Camera features unavailable.")
+from pcb_inspection.camera import cvscam_ffi as cvsCam
+
+if not cvsCam.is_available():
+    logger.warning("libcvsCamCtrl.so not loadable. Real camera features unavailable.")
 
 
 @dataclass
@@ -43,8 +42,10 @@ class CrevisCamera:
     """
 
     def __init__(self, config: CameraConfig | None = None, device_index: int = 0) -> None:
-        if cvsCam is None:
-            raise RuntimeError("cvsCam SDK is not installed. Install the whl from CREVIS.")
+        if not cvsCam.is_available():
+            raise RuntimeError(
+                "libcvsCamCtrl.so not loadable. Install the CREVIS cvsCam SDK first."
+            )
         self.config = config or CameraConfig()
         self._device_index = device_index
         self._system: Any = None
@@ -63,9 +64,7 @@ class CrevisCamera:
             Device info dict (model, serial, ip, etc.).
         """
         self._system = cvsCam.CvsSystem()
-        self._system.UpdateDevice()
-
-        num = self._system.GetAvailableCameraNum()
+        num = self._discover_cameras()
         if num == 0:
             self._system.Free()
             self._system = None
@@ -283,6 +282,25 @@ class CrevisCamera:
             except Exception:
                 pass
         return info
+
+    def _discover_cameras(self) -> int:
+        """Run UpdateDevice + count, with one extended retry on cold start.
+
+        GigE discovery is broadcast-based and the first probe after a fresh
+        process launch occasionally returns 0 even with the camera live on the
+        link. Retry once with a longer timeout before giving up.
+        """
+        for attempt, timeout_ms in enumerate((1500, 5000)):
+            self._system.UpdateDevice(timeout_ms=timeout_ms)
+            num = self._system.GetAvailableCameraNum()
+            if num > 0:
+                return num
+            logger.info(
+                "Discovery returned 0 cameras (attempt %d, timeout=%dms); retrying.",
+                attempt + 1,
+                timeout_ms,
+            )
+        return 0
 
     def _ensure_open(self) -> None:
         if not self._is_open:

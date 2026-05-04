@@ -22,7 +22,8 @@ import numpy as np
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from pcb_inspection.camera.crevis import CameraConfig, CrevisCamera
+from pcb_inspection.camera import CameraConfig, create_camera
+from pcb_inspection.camera.crevis import CrevisCamera  # type alias used in annotations
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,6 +44,17 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--pixel-format", default="Mono8", help="Pixel format (Mono8, BayerRG8, etc.)")
     p.add_argument("--trigger", action="store_true", help="Use software trigger mode")
     p.add_argument("--device", type=int, default=0, help="Camera device index")
+    p.add_argument(
+        "--backend",
+        choices=("auto", "crevis", "mock"),
+        default="auto",
+        help="Camera backend (auto: crevis if SDK present else mock)",
+    )
+    p.add_argument("--mock-image", type=str, help="Path to image used by mock backend")
+    p.add_argument("--mock-dir", type=str, help="Directory of images cycled by mock backend")
+    p.add_argument(
+        "--mock-latency-ms", type=float, default=0.0, help="Simulated grab latency for mock"
+    )
     return p.parse_args()
 
 
@@ -180,7 +192,20 @@ def main() -> None:
         trigger_mode=args.trigger,
     )
 
-    cam = CrevisCamera(config=config, device_index=args.device)
+    mock_kwargs: dict = {"latency_ms": args.mock_latency_ms}
+    if args.mock_image:
+        mock_kwargs["image_path"] = args.mock_image
+    if args.mock_dir:
+        mock_kwargs["image_dir"] = args.mock_dir
+
+    cam = create_camera(
+        backend=args.backend,
+        config=config,
+        device_index=args.device,
+        **mock_kwargs,
+    )
+    if args.backend == "auto" and not isinstance(cam, CrevisCamera):
+        logger.warning("cvsCam SDK not found — falling back to MockCamera.")
 
     try:
         if args.info:

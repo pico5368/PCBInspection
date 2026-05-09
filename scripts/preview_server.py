@@ -380,14 +380,25 @@ def _index_html(host_hint: str, port: int, ranges: dict) -> bytes:
  #main.zoom #stream{{display:block;object-fit:none;
                      transform-origin:top left;
                      image-rendering:pixelated}}
+ /* grid overlay — sized + positioned by JS to match the rendered image area
+    in both fit (letterboxed) and zoom (scrollable) modes. */
+ #grid{{display:none;position:absolute;top:0;left:0;pointer-events:none;
+        --gs:50px;
+        background-image:
+          repeating-linear-gradient(0deg,transparent 0 calc(var(--gs) - 1px),
+            rgba(255,255,255,.28) calc(var(--gs) - 1px) var(--gs)),
+          repeating-linear-gradient(90deg,transparent 0 calc(var(--gs) - 1px),
+            rgba(255,255,255,.28) calc(var(--gs) - 1px) var(--gs))}}
+ #grid.on{{display:block}}
  h2{{margin:0 0 8px;font-size:11px;letter-spacing:.08em;color:#888;
      text-transform:uppercase;font-weight:600}}
  .row{{display:flex;align-items:center;gap:8px;margin:6px 0}}
  .row label{{flex:0 0 70px;color:#aaa}}
  .row input[type=range]{{flex:1}}
  .row .v{{flex:0 0 60px;text-align:right;color:#fc6;font-variant-numeric:tabular-nums}}
- .row input[type=text],.row select{{flex:1;background:#222;border:1px solid #333;
-        color:#ddd;padding:4px 6px;border-radius:3px;font:inherit}}
+ .row input[type=text],.row input[type=number],.row select{{flex:1;background:#222;
+        border:1px solid #333;color:#ddd;padding:4px 6px;border-radius:3px;font:inherit}}
+ .row input[type=number]::-webkit-inner-spin-button{{opacity:.5}}
  button{{width:100%;padding:8px;background:#2a5a8c;color:#fff;border:0;
         border-radius:3px;font:inherit;cursor:pointer;margin-top:6px}}
  button:hover{{background:#3a6aa0}}
@@ -442,6 +453,12 @@ def _index_html(host_hint: str, port: int, ranges: dict) -> bytes:
     <option value='2'>200%</option>
     <option value='4'>400%</option>
    </select></div>
+  <div class='row'><label>custom %</label>
+   <input id='zoomCustom' type='number' min='10' max='1000' step='5' placeholder='e.g. 150'/></div>
+  <div class='row'><label>grid</label>
+   <input id='gridOn' type='checkbox' style='flex:0 0 auto;margin:0 4px 0 0'/>
+   <input id='gridSp' type='number' min='4' max='400' step='2' value='50' style='flex:0 0 70px'/>
+   <span style='color:#888;font-size:11px'>px</span></div>
  </div>
 
  <div>
@@ -461,7 +478,7 @@ def _index_html(host_hint: str, port: int, ranges: dict) -> bytes:
  </div>
 </aside>
 
-<main id='main' class='fit'><img id='stream' src='/stream' alt='live'/></main>
+<main id='main' class='fit'><img id='stream' src='/stream' alt='live'/><div id='grid'></div></main>
 
 <script>
 const R = {json.dumps(ranges)};
@@ -469,6 +486,8 @@ const $ = id => document.getElementById(id);
 const exp = $('exp'), expv = $('expv'), gain = $('gain'), gainv = $('gainv');
 const swidth = $('swidth'), swidthv = $('swidthv');
 const zoom = $('zoom'), main = $('main'), stream = $('stream');
+const zoomCustom = $('zoomCustom'), grid = $('grid');
+const gridOn = $('gridOn'), gridSp = $('gridSp');
 exp.min = R.exposure_min; exp.max = R.exposure_max; exp.step = R.exposure_step;
 gain.min = R.gain_min; gain.max = R.gain_max; gain.step = R.gain_step;
 swidth.min = R.stream_width_min; swidth.max = R.stream_width_max;
@@ -503,24 +522,69 @@ schedule('stream_width', swidth, swidthv, v => Number(v).toFixed(0), 200);
 
 // View zoom mode — pure client-side CSS toggle, no server traffic.
 // Set explicit pixel size in zoom mode so #main (overflow:auto) gives scrollbars
-// when content exceeds the viewport.
+// when content exceeds the viewport. Custom % input takes precedence over
+// the preset select; clearing it falls back to the select.
 function applyZoom() {{
-  const v = zoom.value;
-  if (v === 'fit') {{
-    main.className = 'fit';
-    stream.style.width = stream.style.height = '';
-    return;
+  let k = NaN;
+  const cv = zoomCustom.value.trim();
+  if (cv) k = parseFloat(cv) / 100;
+  if (!Number.isFinite(k) || k <= 0) {{
+    if (zoom.value === 'fit') {{
+      main.className = 'fit';
+      stream.style.width = stream.style.height = '';
+      sizeFitGrid();
+      return;
+    }}
+    k = parseFloat(zoom.value);
   }}
   main.className = 'zoom';
-  const k = parseFloat(v);
   if (stream.naturalWidth) {{
-    stream.style.width = (stream.naturalWidth * k) + 'px';
-    stream.style.height = (stream.naturalHeight * k) + 'px';
+    const w = Math.round(stream.naturalWidth * k);
+    const h = Math.round(stream.naturalHeight * k);
+    stream.style.width = w + 'px';
+    stream.style.height = h + 'px';
+    grid.style.width = w + 'px';
+    grid.style.height = h + 'px';
+    grid.style.left = grid.style.top = '0px';
   }}
 }}
-zoom.addEventListener('change', applyZoom);
-// Re-apply on every JPEG load — natural size changes when stream-width slider moves.
-stream.addEventListener('load', () => {{ if (zoom.value !== 'fit') applyZoom(); }});
+// In fit mode the image is letterboxed by object-fit:contain. Compute the
+// rendered image rect ourselves so the grid covers only the image, not the
+// black bars on the side / top.
+function sizeFitGrid() {{
+  const nw = stream.naturalWidth, nh = stream.naturalHeight;
+  if (!nw || !nh) {{
+    grid.style.width = grid.style.height = '';
+    grid.style.left = grid.style.top = '';
+    return;
+  }}
+  const cw = main.clientWidth, ch = main.clientHeight;
+  const scale = Math.min(cw / nw, ch / nh);
+  const w = Math.round(nw * scale), h = Math.round(nh * scale);
+  grid.style.width = w + 'px';
+  grid.style.height = h + 'px';
+  grid.style.left = Math.round((cw - w) / 2) + 'px';
+  grid.style.top = Math.round((ch - h) / 2) + 'px';
+}}
+// Grid overlay — toggle visibility + screen-px spacing. Position/size handled
+// by applyZoom (zoom mode) and sizeFitGrid (fit mode).
+function applyGrid() {{
+  grid.classList.toggle('on', gridOn.checked);
+  const sp = Math.max(2, parseInt(gridSp.value) || 50);
+  grid.style.setProperty('--gs', sp + 'px');
+}}
+zoom.addEventListener('change', () => {{ zoomCustom.value = ''; applyZoom(); }});
+zoomCustom.addEventListener('input', applyZoom);
+gridOn.addEventListener('change', applyGrid);
+gridSp.addEventListener('input', applyGrid);
+applyGrid();
+// Re-apply on every JPEG load — natural size changes when stream-width slider
+// moves, which also shifts the fit-mode letterbox.
+stream.addEventListener('load', applyZoom);
+// Window resize re-letterboxes the fit-mode image; zoom mode is unaffected.
+window.addEventListener('resize', () => {{
+  if (main.classList.contains('fit')) sizeFitGrid();
+}});
 
 // Status strip poll
 async function pollStats() {{

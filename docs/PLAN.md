@@ -93,6 +93,18 @@ PCB(PBA) 외관 검사를 자동화하여 검사 품질, 생산성, 추적성을
 
 > 조명 평가에 2~3주 투자 → 모델 튜닝 수개월 절약
 
+### 5.3 DOE 지원 도구 (Live preview)
+
+운영 UI(§11)와 별개로, DOE/포지셔닝 단계에서 엔지니어가 SSH 환경에서도 사용하는 헤드리스 라이브 프리뷰 (`scripts/preview_server.py`):
+
+- 브라우저 MJPEG 스트림 + Exposure/Gain/Stream-width 슬라이더 (재시작 없이 조정)
+- 실시간 status: mean/std/saturation/focus(Laplacian variance)/FPS — 조명 튜닝의 정량 피드백
+- **View 측정 보조**: Fit / preset(50–400%) / custom-% 줌, 픽셀 간격 그리드 오버레이 (letterbox 영역 제외, 이미지 위에만)
+- `/save` — 풀해상도 PNG + 메타 JSON 즉시 저장 (`lighting`, `board`, `note` 태그 포함)
+- 카메라 핫스왑/재스캔 (`/camera/reconnect`) — DOE 중 케이블/조명 교체 후 서버 재시작 불필요
+
+> 목적: §5.2 단계 1~3에서 조명/위치 변경 → 시각·정량 피드백 → 즉시 스냅샷 캡처의 루프를 SSH 한 화면 안에서 닫는다.
+
 ---
 
 ## 6. 데이터 전략 (결함 0건 대응)

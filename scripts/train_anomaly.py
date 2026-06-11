@@ -38,7 +38,7 @@ def train_anomaly_model(
     try:
         from anomalib.data import Folder
         from anomalib.engine import Engine
-        from anomalib import TaskType
+        from anomalib.deploy import ExportType
     except ImportError:
         logger.error("anomalib not installed. Run: pip install anomalib")
         sys.exit(1)
@@ -67,8 +67,6 @@ def train_anomaly_model(
         root=dataset_dir,
         normal_dir="good",
         abnormal_dir="defect" if abnormal_dir else None,
-        task=TaskType.SEGMENTATION,
-        image_size=image_size,
         train_batch_size=min(8, normal_count),
         eval_batch_size=min(8, normal_count),
         normal_split_ratio=0.8,
@@ -80,7 +78,6 @@ def train_anomaly_model(
 
     # ── Train ──
     engine = Engine(
-        task=TaskType.SEGMENTATION,
         max_epochs=max_epochs,
         default_root_dir=str(output_dir),
     )
@@ -99,12 +96,12 @@ def train_anomaly_model(
         export_path = output_dir / "weights" / "exported"
         engine.export(
             model=model,
-            export_type="ONNX",
+            export_type=ExportType.ONNX,
             export_root=str(export_path),
         )
         logger.info("ONNX model exported to: %s", export_path)
-    except Exception:
-        logger.warning("ONNX export failed (non-critical), checkpoint saved instead")
+    except Exception as exc:
+        logger.warning("ONNX export failed (non-critical), checkpoint saved instead: %s", exc)
 
     logger.info("Training complete. Output: %s", output_dir)
     return output_dir

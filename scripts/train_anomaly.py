@@ -121,7 +121,7 @@ def _create_model(model_name: str):
         from anomalib.models import Patchcore
         return Patchcore(
             backbone="wide_resnet50_2",
-            layers_to_extract=["layer2", "layer3"],
+            layers=["layer2", "layer3"],
             coreset_sampling_ratio=0.1,
         )
     elif model_name == "padim":

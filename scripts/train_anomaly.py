@@ -73,8 +73,8 @@ def train_anomaly_model(
     )
 
     # ── Model ──
-    model = _create_model(model_name)
-    logger.info("Model: %s", model_name)
+    model = _create_model(model_name, image_size)
+    logger.info("Model: %s (image_size=%s)", model_name, image_size)
 
     # ── Train ──
     engine = Engine(
@@ -107,8 +107,12 @@ def train_anomaly_model(
     return output_dir
 
 
-def _create_model(model_name: str):
-    """Create an anomalib model by name."""
+def _create_model(model_name: str, image_size: tuple[int, int] = (256, 256)):
+    """Create an anomalib model by name.
+
+    image_size is wired into each model's PreProcessor so the input is resized
+    to the requested resolution (anomalib 2.x defaults to 256x256 otherwise).
+    """
     model_name = model_name.lower().replace("-", "_")
 
     if model_name == "efficient_ad":
@@ -116,6 +120,7 @@ def _create_model(model_name: str):
         return EfficientAd(
             teacher_out_channels=384,
             model_size="small",  # "small" or "medium"
+            pre_processor=EfficientAd.configure_pre_processor(image_size=image_size),
         )
     elif model_name == "patchcore":
         from anomalib.models import Patchcore
@@ -123,12 +128,14 @@ def _create_model(model_name: str):
             backbone="wide_resnet50_2",
             layers=["layer2", "layer3"],
             coreset_sampling_ratio=0.1,
+            pre_processor=Patchcore.configure_pre_processor(image_size=image_size),
         )
     elif model_name == "padim":
         from anomalib.models import Padim
         return Padim(
             backbone="resnet18",
             layers=["layer1", "layer2", "layer3"],
+            pre_processor=Padim.configure_pre_processor(image_size=image_size),
         )
     else:
         raise ValueError(f"Unknown model: {model_name}. Use: efficient_ad, patchcore, padim")
